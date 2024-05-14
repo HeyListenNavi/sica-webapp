@@ -1,25 +1,26 @@
 [package]
-name = "gun_detection"
+name = "client"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-image = "0.25.1"
 js-sys = "0.3.69"
 wasm-bindgen = "0.2.92"
 wasm-bindgen-futures = "0.4.42"
 web-sys = { version = "0.3.69", features = [
-    'Document',
-    'Element',
-    'Navigator', 
-    'MediaDevices',
-    'HtmlVideoElement',
-    'HtmlCanvasElement',
-    'HtmlImageElement',
-    'MediaStreamConstraints',
-    'MediaStream',
-    'CanvasRenderingContext2d',
-    'console'
+    "HtmlVideoElement",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "Navigator",
+    "MediaDevices",
+    "MediaStreamConstraints",
+    "MediaStream",
+    "MediaStreamTrack"
 ]}
 yew = { version = "0.21.0", features = ["csr"]}
 yew-router = "0.18.0"
+yew-websocket = "1.21.0"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0.199", features = ["derive"]}
+serde_json = "1.0.116"
+gloo-timers = "0.3.0"
