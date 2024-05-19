@@ -15,12 +15,13 @@ web-sys = { version = "0.3.69", features = [
     "MediaDevices",
     "MediaStreamConstraints",
     "MediaStream",
-    "MediaStreamTrack"
+    "MediaStreamTrack",
 ]}
 yew = { version = "0.21.0", features = ["csr"]}
 yew-router = "0.18.0"
-yew-websocket = "1.21.0"
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0.199", features = ["derive"]}
 serde_json = "1.0.116"
 gloo-timers = "0.3.0"
+gloo-net = { version = "0.5.0", features = ["websocket"] }
+futures = "0.3.30"
