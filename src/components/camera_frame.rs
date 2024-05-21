@@ -1,14 +1,13 @@
-use gloo_net::websocket::{Message, futures::WebSocket};
+use yew::{html, Component, Context, Html};
+use web_sys::*;
+use js_sys::Boolean;
 use gloo_timers::callback::Interval;
-use js_sys::*;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-use web_sys::*;
-use yew::{html, Component, Context, Html};
-use futures::{SinkExt, StreamExt};
 
-const SERVER_URL: &str = "ws://127.0.0.1:8000/predict";
+const API_URL: &str = "http://127.0.0.1:8000";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Prediction {
@@ -28,6 +27,7 @@ pub enum Msg {
 
 pub struct CameraFrame {
     interval: Option<Interval>,
+    client: Client
 }
 
 impl Component for CameraFrame {
@@ -37,9 +37,10 @@ impl Component for CameraFrame {
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             interval: None,
+            client: Client::new()
         }
     }
-    
+
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::StartPrediction => {
@@ -82,7 +83,7 @@ impl Component for CameraFrame {
 
                 let interval_handle = {
                     let ctx_link = ctx.link().clone();
-                    Interval::new(100, move || ctx_link.send_message(Msg::MakePrediction))
+                    Interval::new(1000, move || ctx_link.send_message(Msg::MakePrediction))
                 };
 
                 self.interval = Some(interval_handle);
@@ -131,8 +132,8 @@ impl Component for CameraFrame {
                     .expect("HtmlCanvasElement should have 2d context")
                     .expect("2d context should be Object")
                     .dyn_into::<CanvasRenderingContext2d>()
-                    
                     .expect("Object should be CanvasRenderingContext2d");
+
                 boxes_canvas_ctx.clear_rect(0.0, 0.0, 640.0, 480.0);
 
                 true
@@ -190,61 +191,44 @@ impl Component for CameraFrame {
 
                 
                 // -> Send frame to API <-
-                let ws = WebSocket::open(SERVER_URL).unwrap();
-                let (mut write, mut read) = ws.split();
+                let client = self.client.clone();
                 spawn_local(async move {
-                    write.send(Message::Text(String::from(data_url))).await.unwrap();
-                });
-                spawn_local(async move {
-                    while let msg = read.next().await.unwrap() {
-                        let data = match msg.unwrap() {
-                            Message::Text(data) => { data }
-                            _ => { "".to_string() }
-                        };
-                        console::log_1(&format!("{:?}", serde_json::from_str::<Prediction>(&data.as_str())).into());
-                        let prediction = serde_json::from_str::<Prediction>(&data.as_str()).unwrap();
-                        
-                        let x_top_left = prediction.x_coordinate;
-                        let y_top_left = prediction.y_coordinate;
-                        let x_bottom_right = prediction.x2_coordinate;
-                        let y_bottom_right = prediction.y2_coordinate;
+                    let url = format!("{API_URL}/predict");
+                    let res = client.post(url).body(data_url).send().await;
 
-                        let width = x_bottom_right - x_top_left;
-                        let height = y_bottom_right - y_top_left;
+                    if let Ok(response) = res {
+                        if response.status() == StatusCode::OK {
+                            let predictions = response
+                                .json::<Vec<Prediction>>()
+                                .await
+                                .expect("Response should be in JSON format");
+                            for prediction in predictions {
+                                let x_top_left = prediction.x_coordinate;
+                                let y_top_left = prediction.y_coordinate;
+                                let x_bottom_right = prediction.x2_coordinate;
+                                let y_bottom_right = prediction.y2_coordinate;
 
-                        let object = prediction.detected_object.as_str();
+                                let width = x_bottom_right - x_top_left;
+                                let height = y_bottom_right - y_top_left;
 
-                        // -> Draw detection <-
-                        boxes_canvas_ctx.clear_rect(0.0, 0.0, 640.0, 480.0);
+                                let object = prediction.detected_object.as_str();
+                                
+                                // -> Draw detection <-
+                                
+                                boxes_canvas_ctx.set_line_width(3 as f64);
+                                boxes_canvas_ctx.set_stroke_style(&JsValue::from_str("#F00"));
+                                boxes_canvas_ctx.stroke_rect(x_top_left, y_top_left, width, height);
 
-                        boxes_canvas_ctx.set_line_width(3 as f64);
-                        boxes_canvas_ctx.set_stroke_style(&JsValue::from_str("#F00"));
-                        boxes_canvas_ctx.stroke_rect(x_top_left, y_top_left, width, height);
-        
-                        boxes_canvas_ctx.set_font("20px Noto Sans");
-                        boxes_canvas_ctx.set_fill_style(&JsValue::from_str("#F00"));
-                        boxes_canvas_ctx
-                            .fill_text(object, x_top_left, y_top_left - 8.0)
-                            .expect("unable to write detected object text");
+                                boxes_canvas_ctx.set_font("20px Noto Sans");
+                                boxes_canvas_ctx.set_fill_style(&JsValue::from_str("#F00"));
+                                boxes_canvas_ctx
+                                .fill_text(object, x_top_left, y_top_left - 8.0)
+                                .expect("unable to write detected object text");
+                            }
+                        }
                     }
-                    //let (mut sender_ws, mut receiver_ws) = mpsc::channel::<Message>(1000);
-
-                    // let client = Client::new();
-                    // let url = format!("{API_URL}/predict");
-                    // let res = client.post(url).body(data_url).send().await;
-;
-                    // if let Ok(response) = res {
-                    //     if response.status() == StatusCode::OK {
-                    //         let predictions = response
-                    //             .json::<Vec<Prediction>>()
-                    //             .await
-                    //             .expect("Response should be in JSON format");
-                    //         for prediction in predictions {
-                    //         }
-                    //     }
-                    // }
+                    boxes_canvas_ctx.clear_rect(0.0, 0.0, 640.0, 480.0);
                 });
-
                 true
             }
         }
